@@ -2,6 +2,30 @@ const uploadFile = require("../middleware/upload");
 const fs = require("fs");
 const path = require("path");
 
+const certtoolDb = require("../middleware/certtooldb");
+var exec = require("child_process").exec;
+var execSync = require("child_process").execSync;
+const { stdout } = require("process");
+const { default: axios } = require("axios");
+//const uploadFileMiddleware = require("../middleware/upload");
+const req = require("express/lib/request");
+const certtooldb = require("../middleware/certtooldb");
+const mongoose = require("mongoose");
+
+async function saveFile(md5, csrfile, keyfile, crtfile) {
+  try {
+    mongoose.connect("mongodb://localhost/certtool");
+    const certrow = await certtooldb.create({
+      md5: md5,
+      csrfile: csrfile,
+      keyfile: keyfile,
+      crtfile: crtfile,
+    });
+  } catch (e) {
+    console.log(e.message);
+  }
+}
+
 const baseUrl = "http://localhost:3001/files/";
 
 var findFiles = function (folder, pattern = /.*/, callback) {
@@ -64,13 +88,6 @@ function splitcertsubject(certsubject) {
   return kpsub;
 }
 
-var exec = require("child_process").exec;
-var execSync = require("child_process").execSync;
-const { stdout } = require("process");
-const { default: axios } = require("axios");
-const uploadFileMiddleware = require("../middleware/upload");
-//var FindFiles = require('file-regex');
-
 const upload = async (req, res) => {
   console.log("Upload hit");
   try {
@@ -84,8 +101,8 @@ const upload = async (req, res) => {
     }
 
     try {
-      const cmd1 = `openssl x509 -noout -modulus -inform der -in "/work/${req.file.originalname}"`;
-      const cmd2 = `openssl x509 -noout -modulus -inform der -in "/work/${req.file.originalname}" | openssl md5`;
+      const cmd1 = `openssl x509 -noout -modulus -inform der -in "${req.file.path}"`;
+      const cmd2 = `openssl x509 -noout -modulus -inform der -in "${req.file.path}" | openssl md5`;
 
       execSync(cmd1).toString();
       resExec = execSync(cmd2).toString();
@@ -93,8 +110,8 @@ const upload = async (req, res) => {
     } catch (error) {
       //console.log( error.message );
       try {
-        const cmd1 = `openssl x509 -noout -modulus -in "/work/${req.file.originalname}"`;
-        const cmd2 = `openssl x509 -noout -modulus -in "/work/${req.file.originalname}" | openssl md5`;
+        const cmd1 = `openssl x509 -noout -modulus -in "${req.file.path}"`;
+        const cmd2 = `openssl x509 -noout -modulus -in "${req.file.path}" | openssl md5`;
 
         execSync(cmd1).toString();
         resExec = execSync(cmd2).toString();
@@ -121,13 +138,17 @@ const upload = async (req, res) => {
         //console.log( csr.md5 )
       });
 
+      saveFile(md5, "", "", req.file.path);
+
       res.status(200).send({
         message: `Uploaded the file successfully: ${req.file.path} : ${md5} `,
+        filepath: req.file.path,
+        md5: md5,
       });
     } else {
       console.log("Uploaded file not a valid certificate");
       res.status(500).send({
-        message: `Uploaded file not a valid certificate: ${req.file.originalname}`,
+        message: `Uploaded file not a valid certificate: ${req.file.path}`,
       });
     }
   } catch (err) {
@@ -174,10 +195,6 @@ const getCerts = (req, res) => {
 
 const getCSRs = (req, res) => {
   const directoryPath = "/work/";
-
-  // var csr_files = findFiles(directoryPath, /\.csr/, function(o) {
-  //     console.log('look what we have found : ' + o)
-  // }) ;
 
   let fileInfos = [];
   var csr_files = findFiles(directoryPath, /\.csr/, function (o) {
@@ -263,18 +280,22 @@ const getFile = (req, res) => {
 
 const getCertificate = (req, res) => {
   try {
-    // const cmd1 = `openssl x509 -in "${req.params.filename}" -text -noout`
-    const cmd1 = `openssl x509 -in "/work/github.cer" -text -noout`;
+    console.log("params1 is :" + req.query.filename);
+    const cmd_pem = `openssl x509 -in "${req.query.filename}" -text -noout`;
+    const cmd_der = `openssl x509 -inform der -in "${req.query.filename}" -text -noout`;
 
-    resExec = execSync(cmd1).toString();
-    // console.log( resExec );
+    try {
+      resExec = execSync(cmd_pem).toString();
+    } catch (error) {
+      resExec = execSync(cmd_der).toString();
+    }
+
     rows = resExec.toString().split("\n");
     rowssubject = filterItems(rows, "Subject: ")[0].split("Subject: ");
 
-    // console.log( rowssubject[1] );
     certsubject = splitcertsubject(rowssubject[1]);
     console.log(certsubject);
-    // res.send({data: `${rowssubject[1]}`});
+
     res.send(JSON.stringify(certsubject));
   } catch (error) {
     console.log(error.message);
@@ -350,12 +371,22 @@ const newCSR = (req, res) => {
         console.log(`stderr: ${stderr}`);
         return;
       }
+
       ("openssl x509 -inform DER -in certtool.homelabdc22.local.crt -out certtool.homelabdc22.local.pem");
       ("openssl pkcs12 -export -out local.pfx -inkey local.key -in local.pem");
       ("Enter Export Password:");
       ("Verifying - Enter Export Password:");
       console.log(`stdout: ${stdout}`);
     }
+  );
+  var resExec = execSync(
+    `openssl req -noout -modulus -in "${folderName}/${req.body.cn}.csr" | openssl md5`.toString()
+  );
+  md5 = resExec.toString().replace("(stdin)= ", "").trim();
+  saveFile(
+    md5,
+    `${folderName}/${req.body.cn}.csr`,
+    `${folderName}/${req.body.cn}.key`
   );
 };
 

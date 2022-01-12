@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import Dropzone from "react-dropzone";
 import { getFiles, uploadFile } from "../services/upload-files.service";
 import "../App.css";
 import "bootstrap/dist/css/bootstrap.min.css";
+import { ImportContext } from "../services/importContext";
 
 const UploadFile = () => {
   const [selectedFiles, setSelectedFiles] = useState(undefined);
@@ -11,27 +12,30 @@ const UploadFile = () => {
   const [message, setMessage] = useState("");
 
   const [fileInfos, setFileInfos] = useState([]);
+  const { state, setState } = useContext(ImportContext);
 
   const upload = () => {
     let currentFile = selectedFiles[0];
 
     setProgress(0);
-    setCurrentFile(currentFile);
+    //setState(currentFile);
 
     uploadFile(currentFile, (event) => {
       setProgress(Math.round((100 * event.loaded) / event.total));
     })
       .then((response) => {
         setMessage(response.data.message);
+        setState(response.data.filepath);
+        console.log("setuploadedfile: " + response.data.message);
+        console.log("filepath: " + response.data.filepath);
         return getFiles();
       })
       .then((files) => {
         setFileInfos(files.data);
       })
-      .catch(() => {
+      .catch((e) => {
         setProgress(0);
-        setMessage("Could not upload the file!");
-        setCurrentFile(undefined);
+        setMessage("Could not upload the file!" + e);
       });
 
     setSelectedFiles(undefined);
@@ -41,10 +45,12 @@ const UploadFile = () => {
     console.log("onDrop: " + files[0].name);
     if (files.length > 0) {
       setSelectedFiles(files);
+      //upload();
     }
   };
 
   useEffect(() => {
+    console.log("useEffect upload");
     getFiles().then((response) => {
       setFileInfos(response.data);
     });
@@ -96,19 +102,6 @@ const UploadFile = () => {
       <div className="alert alert-light" role="alert">
         {message}
       </div>
-
-      {fileInfos.length > 0 && (
-        <div className="card">
-          <div className="card-header">Lijst van bestanden</div>
-          <ul className="list-group list-group-flush">
-            {fileInfos.map((file, index) => (
-              <li className="list-group-item" key={index}>
-                <a href={file.url}>{file.name}</a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 };

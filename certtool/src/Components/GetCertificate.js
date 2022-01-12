@@ -1,18 +1,22 @@
-import React, { useReducer, useState } from "react";
+import React, { useReducer, useState, useContext, useEffect } from "react";
 import "../App.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 import InputAttribute from "./InputAttribute";
+import { ImportContext } from "../services/importContext";
 
-const formReducer = (state, event) => {
+const axios = require("axios");
+
+const formReducer = (currentstate, event) => {
+  console.log(event.name);
   return {
-    ...state,
+    ...currentstate,
     [event.name]: event.value,
   };
 };
 
-const getData = async (url) => {
+const getData = async (url, params) => {
   try {
-    const response = await axios.get(url);
+    const response = await axios.get(url, { params });
     const data = response.data;
     // console.log(data);
     return data;
@@ -21,11 +25,18 @@ const getData = async (url) => {
   }
 };
 
-const axios = require("axios");
-
 const GetCertificate = () => {
-  const [formData, setFormData] = useReducer(formReducer, {});
-  const [certFilename, setCertFilename] = useState();
+  const [formData, setFormData] = useReducer(formReducer, {
+    cn: "",
+    o: "",
+    ou: "",
+    l: "",
+    st: "",
+    c: "",
+  });
+  //const [currentFile, setCurrentFile] = useState();
+
+  const { state, setState } = useContext(ImportContext);
 
   const handleChange = (event) => {
     console.log("Handlechange hit: " + event.target.name);
@@ -35,28 +46,38 @@ const GetCertificate = () => {
 
   async function getCert() {
     console.log("cn : " + formData.cn);
-    console.log("cerfilename : " + certFilename);
-    let res = await getData("http://localhost:3001/api/cert");
-    //cn = res.find( ({name}) => name === 'CN');
-    //console.log( cn);
-    setFormData({ name: "c", value: res.C });
-    setFormData({ name: "st", value: res.ST });
-    setFormData({ name: "l", value: res.L });
-    setFormData({ name: "o", value: res.O });
-    setFormData({ name: "cn", value: res.CN });
-    setFormData({ name: "ou", value: res.OU });
+    console.log("cerfilename : " + state);
+    let res = await getData("http://localhost:3001/api/cert", {
+      filename: state,
+    });
+    res.CN && setFormData({ name: "cn", value: res.CN });
+    res.O && setFormData({ name: "o", value: res.O });
+    res.OU && setFormData({ name: "ou", value: res.OU });
+    res.L && setFormData({ name: "l", value: res.L });
+    res.ST && setFormData({ name: "st", value: res.ST });
+    res.C && setFormData({ name: "c", value: res.C });
+
     // console.log(res);
   }
 
+  useEffect(() => {
+    console.log(`useEffect getcert: ${state}`);
+  }, []);
+
   return (
-    <div>
+    <div className="container">
       <InputAttribute
         label="Common Name"
         name="cn"
         value={formData.cn}
         onChange={handleChange}
       />
-      <InputAttribute label="SAN" name="san" onChange={handleChange} />
+      <InputAttribute
+        label="SAN"
+        name="san"
+        value="san"
+        onChange={handleChange}
+      />
       <InputAttribute
         label="Organization"
         name="o"
@@ -87,9 +108,20 @@ const GetCertificate = () => {
         value={formData.c}
         onChange={handleChange}
       />
-      <InputAttribute label="keysize" name="keysize" onChange={handleChange} />
-      <InputAttribute label="hash" name="hash" onChange={handleChange} />
+      <InputAttribute
+        label="keysize"
+        name="keysize"
+        value="keysize"
+        onChange={handleChange}
+      />
+      <InputAttribute
+        label="hash"
+        name="hash"
+        value="hash"
+        onChange={handleChange}
+      />
       <button onClick={getCert}>GetCert</button>
+      <div>Uploadedfile is {JSON.stringify(state, null, 2)}</div>
     </div>
   );
 };
